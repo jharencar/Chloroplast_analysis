@@ -1,0 +1,136 @@
+---
+title: "Chloroplast_analysis"
+author: "Julia Harenčár"
+format: html
+editor: visual
+---
+
+## Chloroplast analysis
+
+```{r}
+# library(rdiversity)
+library(vcfR)
+library(ape)
+library(tidyverse)
+library(ggplot2)
+library(adegenet)
+library(poppr)
+
+# Read in VCF
+vcf <- read.vcfR("/Users/juliaharencar/Documents/Github/Chloroplast_analysis/AVH_filtered_chloroplast.vcf.gz", convertNA  = TRUE)
+unfilt_vcf <- read.vcfR("/Users/juliaharencar/Documents/Github/Chloroplast_analysis/unfiltered_chloroplast.vcf.gz", convertNA  = TRUE)
+# PCA below
+library(vegan)
+library(ggplot2)
+library(ggpubr)
+
+# extract snp data
+snps_num <- vcfR::extract.gt(vcf, 
+           element = "GT",
+           IDtoRowNames  = F,
+           as.numeric = T,
+           convertNA = T,
+           return.alleles = F)
+
+# transpose and create data frame
+snps_num_t <- t(snps_num) 
+snps_num_df <- data.frame(snps_num_t)
+
+# write function to count NAs
+find_NAs <- function(x){
+  NAs_TF <- is.na(x)
+  i_NA <- which(NAs_TF == TRUE)
+  N_NA <- length(i_NA)
+  
+  cat("Results:",N_NA, "NAs present\n.")
+  return(i_NA)
+}
+# count NAs
+# number of rows (individuals)
+N_rows <- nrow(snps_num_t)
+# vector to hold output (number of NAs)
+N_NA   <- rep(x = 0, times = N_rows)
+# total number of columns (SNPs)
+N_SNPs <- ncol(snps_num_t)
+# the for() loop
+for(i in 1:N_rows){
+  # for each row, find the location of
+  ## NAs with snps_num_t()
+  i_NA <- find_NAs(snps_num_t[i,]) 
+  # then determine how many NAs
+  ## with length()
+  N_NA_i <- length(i_NA)
+## our storage vector
+  N_NA[i] <- N_NA_i
+}
+
+# histogram NAs
+# 50% of N_SNPs
+cutoff50 <- N_SNPs*0.5
+
+hist(N_NA)            
+abline(v = cutoff50, 
+       col = 2, 
+       lwd = 2, 
+       lty = 2)
+
+# Interesting, only 80 snps and quite a few missing all of them!
+# trying copied below directly:
+percent_NA <- N_NA/N_SNPs*100
+# Call which() on percent_NA
+i_NA_50percent <- which(percent_NA > 50) 
+snps_num_t02 <- snps_num_t[-i_NA_50percent, ]
+
+# center data:
+SNPs_scaled <- scale(snps_num_t02)
+#calculat principal components
+pca_scaled <- prcomp(snps_num_t02)
+
+
+#### STOPPED HERE #####
+
+# TREE below
+# working tree from my old cati code below, needs to be rooted... need to align outgroup bam to chloroplast, clean, and re-generate VCF (should be pretty quick)
+# convert to geneind
+gind <- vcfR2genind(unfilt_vcf)
+
+# calculate and plot
+phylo <- aboot(gind, strata = NULL, tree = "nj", distance = "nei.dist", root = FALSE)
+plot.phylo(phylo, type = 'unrooted')
+plot.phylo(phylo)
+
+### below are other attempts at making a tree
+#### other maybe works below if change how plotting?
+# Extract the sequence data from the VCF object:
+seq_data <- extract.gt(vcf)
+
+# Convert the sequence data to a format suitable for dist.dna:
+seq_matrix <- as.matrix(seq_data)
+
+# Calculate pairwise genetic distances with the dist.dna function from the ape package:
+genetic_distances <- dist.dna(seq_matrix, model = "N")
+
+# Calculate neighbor joining tree
+nj_tree <- nj(genetic_distances)
+
+plot(nj_tree, "unrooted", use.edge.length=TRUE, lab4ut="axial", root.edge=FALSE)
+
+## OTHER below
+# Create hierarchical clustering tree... 
+hc <- hclust(genetic_distances)
+
+# Convert hierarchical clustering tree to a phylogenetic tree
+dist_tree <- as.phylo(hc)
+
+# Plot distance tree
+ggtree(dist_tree, layout = "rectangular") +
+  geom_tiplab() +
+  geom_treescale(width = 0.10, x = 0) +
+  xlim(0, .15) +
+  labs(title = "IQtree distance tree")
+
+# Convert VCF to pairwise genetic distance matrix
+dist <- gen2dist(vcf, biallelic = TRUE)
+
+
+```
