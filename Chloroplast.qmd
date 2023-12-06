@@ -134,3 +134,6 @@ dist <- gen2dist(vcf, biallelic = TRUE)
 
 
 ```
+
+### Notes on Chloroplast tree results
+It looks like all hybrids have a villosissimus chloroplast, which is shocking! Many hybs looked like alle, thought bc of maternal effects but must be dominance of alle floral traits especially (?) - double check stuff we called alle that turned out to be hyb - fall with vill in chloroplast tree? 
