@@ -6,7 +6,7 @@ editor: visual
 ---
 
 ## Chloroplast analysis
-
+### Unrooted tree
 ```{r}
 # library(rdiversity)
 library(vcfR)
@@ -19,13 +19,83 @@ library(poppr)
 # Read in VCF
 vcf <- read.vcfR("/Users/juliaharencar/Documents/Github/Chloroplast_analysis/AVH_filtered_chloroplast.vcf.gz", convertNA  = TRUE)
 unfilt_vcf <- read.vcfR("/Users/juliaharencar/Documents/Github/Chloroplast_analysis/unfiltered_chloroplast.vcf.gz", convertNA  = TRUE)
+
+# TREE below
+# working tree from my old cati code below, need to figure out if this is right/reasonable - write up methods!!
+# convert to geneind
+gind <- vcfR2genind(unfilt_vcf)
+
+# calculate and plot
+phylo <- aboot(gind, strata = NULL, tree = "nj", distance = "nei.dist", root = FALSE)
+plot.phylo(phylo, type = 'unrooted')
+plot.phylo(phylo)
+
+### below are other attempts at making a tree
+#### other maybe works below if change how plotting?
+# Extract the sequence data from the VCF object:
+seq_data <- extract.gt(vcf)
+
+# Convert the sequence data to a format suitable for dist.dna:
+seq_matrix <- as.matrix(seq_data)
+
+# Calculate pairwise genetic distances with the dist.dna function from the ape package:
+genetic_distances <- dist.dna(seq_matrix, model = "N")
+
+# Calculate neighbor joining tree
+nj_tree <- nj(genetic_distances)
+
+plot(nj_tree, "unrooted", use.edge.length=TRUE, lab4ut="axial", root.edge=FALSE)
+
+## OTHER below
+# Create hierarchical clustering tree... 
+hc <- hclust(genetic_distances)
+
+# Convert hierarchical clustering tree to a phylogenetic tree
+dist_tree <- as.phylo(hc)
+
+# Plot distance tree
+ggtree(dist_tree, layout = "rectangular") +
+  geom_tiplab() +
+  geom_treescale(width = 0.10, x = 0) +
+  xlim(0, .15) +
+  labs(title = "IQtree distance tree")
+
+# Convert VCF to pairwise genetic distance matrix
+dist <- gen2dist(vcf, biallelic = TRUE)
+
+
+```
+
+### Rooted tree with other local Costus
+```{r}
+# New VCF includes BRAC that had coverage greater or equal to 0.5x; includes all GUAN and LAEV and the few LASI - all additions from OG_plate1 sequencing
+
+# no VCF filtering - need to play and see which filter fucked things up above.
+
+# read in unfiltered vcf
+unfilt_vcf.rooted <- read.vcfR("/Users/juliaharencar/Documents/Github/Chloroplast_analysis/unfiltered_chloroplast_w.outgroups.vcf.gz", convertNA  = TRUE)
+
+# convert to geneind
+gind <- vcfR2genind(unfilt_vcf.rooted)
+
+# calculate and plot
+phylo <- aboot(gind, strata = NULL, tree = "nj", distance = "nei.dist", root = FALSE)
+plot.phylo(phylo)
+
+```
+#### Notes on Chloroplast tree results
+
+It looks like all hybrids have a villosissimus chloroplast, which is shocking! Many hybs looked like alle, thought bc of maternal effects but must be dominance of alle floral traits especially (?) - double check stuff we called alle that turned out to be hyb - fall with vill in chloroplast tree? Where do backcrosses fall? -
+
+### PCA
+```{r}
 # PCA below
 library(vegan)
 library(ggplot2)
 library(ggpubr)
 
 # extract snp data
-snps_num <- vcfR::extract.gt(vcf, 
+snps_num <- vcfR::extract.gt(unfilt_vcf, 
            element = "GT",
            IDtoRowNames  = F,
            as.numeric = T,
@@ -74,7 +144,6 @@ abline(v = cutoff50,
        lwd = 2, 
        lty = 2)
 
-# Interesting, only 80 snps and quite a few missing all of them!
 # trying copied below directly:
 percent_NA <- N_NA/N_SNPs*100
 # Call which() on percent_NA
@@ -83,57 +152,8 @@ snps_num_t02 <- snps_num_t[-i_NA_50percent, ]
 
 # center data:
 SNPs_scaled <- scale(snps_num_t02)
-#calculat principal components
+# calculate principal components (DOESN'T WORK)
 pca_scaled <- prcomp(snps_num_t02)
-
-
-#### STOPPED HERE #####
-
-# TREE below
-# working tree from my old cati code below, needs to be rooted... need to align outgroup bam to chloroplast, clean, and re-generate VCF (should be pretty quick)
-# convert to geneind
-gind <- vcfR2genind(unfilt_vcf)
-
-# calculate and plot
-phylo <- aboot(gind, strata = NULL, tree = "nj", distance = "nei.dist", root = FALSE)
-plot.phylo(phylo, type = 'unrooted')
-plot.phylo(phylo)
-
-### below are other attempts at making a tree
-#### other maybe works below if change how plotting?
-# Extract the sequence data from the VCF object:
-seq_data <- extract.gt(vcf)
-
-# Convert the sequence data to a format suitable for dist.dna:
-seq_matrix <- as.matrix(seq_data)
-
-# Calculate pairwise genetic distances with the dist.dna function from the ape package:
-genetic_distances <- dist.dna(seq_matrix, model = "N")
-
-# Calculate neighbor joining tree
-nj_tree <- nj(genetic_distances)
-
-plot(nj_tree, "unrooted", use.edge.length=TRUE, lab4ut="axial", root.edge=FALSE)
-
-## OTHER below
-# Create hierarchical clustering tree... 
-hc <- hclust(genetic_distances)
-
-# Convert hierarchical clustering tree to a phylogenetic tree
-dist_tree <- as.phylo(hc)
-
-# Plot distance tree
-ggtree(dist_tree, layout = "rectangular") +
-  geom_tiplab() +
-  geom_treescale(width = 0.10, x = 0) +
-  xlim(0, .15) +
-  labs(title = "IQtree distance tree")
-
-# Convert VCF to pairwise genetic distance matrix
-dist <- gen2dist(vcf, biallelic = TRUE)
-
 
 ```
 
-### Notes on Chloroplast tree results
-It looks like all hybrids have a villosissimus chloroplast, which is shocking! Many hybs looked like alle, thought bc of maternal effects but must be dominance of alle floral traits especially (?) - double check stuff we called alle that turned out to be hyb - fall with vill in chloroplast tree? 
