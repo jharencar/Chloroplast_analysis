@@ -1,0 +1,188 @@
+---
+title: "VCF QC for filtering"
+author: "Julia Harnčár"
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    code-overflow: wrap
+    toc: true
+    number-sections: true
+theme:
+  light: minty
+  dark: superhero
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: false
+---
+
+## Set up variables and generate quality data
+
+I am following [this tutorial](https://speciationgenomics.github.io/filtering_vcfs/).
+
+```{bash}
+# SKIP subset here bc chloroplasts small - but consider for full chrmosomal vcfs
+# bcftools view unfiltered_chloroplast_w.outgroups.vcf.gz | vcfrandomsample -r 0.012 > unfiltered_chloroplast_w.outgroups_subset.vcf.gz
+
+# make a new direcroty for QC output
+mkdir vcftools
+
+# set variables for cleaner code
+VCF=unfiltered_chloroplast_w.outgroups.vcf.gz
+OUT=./vcftools/chloroplast_w.outgroup
+
+# Calculate allele frequency
+vcftools --gzvcf $VCF --freq2 --out $OUT --max-alleles 2
+
+# Calculate mean depth per indiv. 
+vcftools --gzvcf $VCF --depth --out $OUT
+
+# Calculate mean depth per site
+vcftools --gzvcf $VCF --site-mean-depth --out $OUT
+
+# Calculate site quality 
+vcftools --gzvcf $VCF --site-quality --out $OUT
+
+# Calculate proportion of missing data per individual
+vcftools --gzvcf $VCF --missing-indv --out $OUT
+
+# Calculate proportion of missing data per site
+vcftools --gzvcf $VCF --missing-site --out $OUT
+
+# Calculate heterozygosity and inbreeding coefficient per individual
+vcftools --gzvcf $VCF --het --out $OUT
+```
+
+## Visualize data quality with R
+
+```{r}
+#| output: false
+# load packages
+library(tidyverse)
+theme_set(theme_bw())
+```
+
+### Quality
+```{r}
+# import data
+var_qual <- read_delim("./vcftools/chloroplast_w.outgroup.lqual", delim = "\t", col_names = c("chr", "pos", "qual"), skip = 1)
+
+# plot
+a <- ggplot(var_qual, aes(qual)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a
+a + xlim(0, 500)
+```
+NOTES: pretty good, though filter obvi needed, going for 30 as most are under 50
+
+### Variant Mean Depth
+```{r}
+# import data
+var_depth <- read_delim("./vcftools/chloroplast_w.outgroup.ldepth.mean", delim = "\t", col_names = c("chr", "pos", "mean_depth", "var_depth"), skip = 1)
+
+# plot
+ggplot(var_depth, aes(mean_depth)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+
+# view data summary
+summary(var_depth$mean_depth)
+```
+NOTES: After looking at plot and summary, setting max depth to 110 and min to 5 to remove at least some the odd peak of lower coverage variants... I don't want to be too harsh here though because of having outgroups in this vcf... 
+
+### Variant Missingness
+```{r}
+# import data
+var_miss <- read_delim("./vcftools/chloroplast_w.outgroup.lmiss", delim = "\t", col_names = c("chr", "pos", "nchr", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+# plot
+ggplot(var_miss, aes(fmiss)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+
+# summary
+summary(var_miss$fmiss)
+```
+NOTES: looks like pretty okay, with most having less than 25% missingness, but defintely some stuff that should be removed. I will set this very stringently for now following Rishi's suggestions for funky chloroplast data. (I am sure missingness is off the charts with my low cov. data...)
+
+### Minor allele frequency
+```{r}
+# import data
+var_freq <- read_delim("./vcftools/chloroplast_w.outgroup.frq", delim = "\t",
+                       col_names = c("chr", "pos", "nalleles", "nchr", "a1", "a2"), skip = 1)
+
+# find minor allele frequency
+var_freq$maf <- var_freq %>% select(a1, a2) %>% apply(1, function(z) min(z))
+# Here we used apply on our allele frequencies to return the lowest allele frequency at each variant. We then added these to our dataframe as the variable maf. Next we will plot the distribution.
+
+# plot
+ggplot(var_freq, aes(maf)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+
+# Summary stats
+summary(var_freq$maf)
+```
+NOTES: Pretty normal I think - lots of minor alleles - will not filter on this since that can fuck up population structure, which is what I need here. 
+
+### Mean Depth per individual
+```{r}
+# import data
+ind_depth <- read_delim("./vcftools/chloroplast_w.outgroup.idepth", delim = "\t", col_names = c("ind", "nsites", "depth"), skip = 1)
+
+# plot 
+ggplot(ind_depth, aes(depth)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+```
+NOTES: Weird and highly variable becasue chloroplast... Not sure if there is anything to be done about it
+
+## Proportion of missing data per individual
+```{r}
+# import data 
+ind_miss  <- read_delim("./vcftools/chloroplast_w.outgroup.imiss", delim = "\t",
+                        col_names = c("ind", "ndata", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+# plot 
+ggplot(ind_miss, aes(fmiss)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+```
+# BAD - some samples are missing more than 75% data, several somehow missing everything... I need to remove these I think! maybe even remove samples missing more than like, 25%... 
+
+## Heterozygosity and inbreeding coefficient per individual
+```{r}
+# import data 
+ind_het <- read_delim("./vcftools/chloroplast_w.outgroup.het", delim = "\t",
+           col_names = c("ind","ho", "he", "nsites", "f"), skip = 1)
+
+# plot
+ggplot(ind_het, aes(f)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+```
+NOTES: looks great - just what we roughly expect from HWE
+
+## VCF filtering
+```{bash}
+# First, remove those with more than 20% missing snps based on calculated missiness file from above
+bcftools view --samples-file <(awk -v threshold=0.2 '$5 <= threshold {print $1}' ./vcftools/chloroplast_w.outgroup.imiss) -Oz -o unfiltered_chloroplast_w.outgroups_.5missco.vcf.gz unfiltered_chloroplast_w.outgroups.vcf.gz
+
+## check that it worked (IT DOES! phew)
+## Calculate proportion of missing data per individual
+#vcftools --gzvcf unfiltered_chloroplast_w.outgroups_.5missco.vcf.gz --missing-indv --out #./vcftools/unfiltered_chloroplast_w.outgroups_.5missco
+## import data
+#ind_miss  <- read_delim("./vcftools/unfiltered_chloroplast_w.outgroups_.5missco.imiss", delim = "\t",
+#                        col_names = c("ind", "ndata", "nfiltered", "nmiss", "fmiss"), skip = 1)
+## plot
+#ggplot(ind_miss, aes(fmiss)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+
+# set variables 
+VCF_IN=unfiltered_chloroplast_w.outgroups_.5missco.vcf.gz
+VCF_OUT=chloroplast_w.outgroups_filtered.vcf.gz
+
+# Set our chosen filters
+# MAF=0.1 # "Number of samples times this number gives number of minumum # individuals that must have an allele for it to be included; chloroplast vcf with outgroups has 138, so 0.015 means 2 samps must have the allele to include it. - might want to remove this because only 4 guan, so that might kill snp count... in fact, skipping for now. 
+# find helpful detailed MAF notes here: https://speciationgenomics.github.io/filtering_vcfs/
+# reccommend one dataset with filters and the other without for use in analyses with different biases
+MISS=0.1 # Meaning only tolerate 10% missingness (remove things in 10% or fewer of the samples)
+QUAL=30 
+MIN_DEPTH=5
+MAX_DEPTH=110
+
+# perform the filtering with vcftools
+vcftools --gzvcf $VCF_IN \
+--remove-indels --max-missing $MISS --minQ $QUAL \
+--min-meanDP $MIN_DEPTH --max-meanDP $MAX_DEPTH \
+--minDP $MIN_DEPTH --maxDP $MAX_DEPTH --recode --stdout | gzip -c > \
+$VCF_OUT
+```
+Now, we have a final, filtered output vcf: chloroplast_w.outgroups_filtered.vcf.gz
