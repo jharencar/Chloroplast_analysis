@@ -93,7 +93,7 @@ ggplot(var_depth, aes(mean_depth)) + geom_density(fill = "dodgerblue1", colour =
 summary(var_depth$mean_depth)
 ```
 
-NOTES: After looking at plot and summary, setting max depth to 110 and min to 5 to remove at least some the odd peak of lower coverage variants... I don't want to be too harsh here though because of having outgroups in this vcf...
+NOTES: After looking at plot and summary, min to 5 to remove at least some the odd peak of lower coverage variants... I don't want to be too harsh here though because of having outgroups in this vcf... removed max because of how gradual slope is and how arbitrary it feels. 
 
 ### Variant Missingness
 
@@ -190,17 +190,17 @@ VCF_OUT=chloroplast_w.outgroups_filtered.vcf.gz
 # Set our chosen filters
 # MAF=0.1 # "Number of samples times this number gives number of minumum # individuals that must have an allele for it to be included; chloroplast vcf with outgroups has 138, so 0.015 means 2 samps must have the allele to include it. - might want to remove this because only 4 guan, so that might kill snp count... in fact, skipping for now. 
 # find helpful detailed MAF notes here: https://speciationgenomics.github.io/filtering_vcfs/
-# reccommend one dataset with filters and the other without for use in analyses with different biases
+# reccommend one dataset with filters and the other without for use in analyses with different biase
 MISS=0.1 # Meaning only tolerate 10% missingness (remove things in 10% or fewer of the samples)
 QUAL=30 
 MIN_DEPTH=5
-MAX_DEPTH=110
+# MAX_DEPTH=110 removed because of the histogram and in hopes of revocering more sites.
 
 # perform the filtering with vcftools
 vcftools --gzvcf $VCF_IN \
 --remove-indels --max-missing $MISS --minQ $QUAL \
---min-meanDP $MIN_DEPTH --max-meanDP $MAX_DEPTH \
---minDP $MIN_DEPTH --maxDP $MAX_DEPTH --max-alleles 2 \
+--min-meanDP $MIN_DEPTH \
+--minDP $MIN_DEPTH --max-alleles 2 \
 --recode --stdout | gzip -c > \
 $VCF_OUT
 ```
@@ -213,7 +213,7 @@ Now, we have a final, filtered output vcf: chloroplast_w.outgroups_filtered.vcf.
 
 I am following [this tutorial](https://speciationgenomics.github.io/filtering_vcfs/).
 
-```{bash}
+```{bash, output=FALSE}
 # set variables for cleaner code
 VCF=unfiltered_chloroplast.vcf.gz
 OUT=./vcftools/chloroplast_AHV
@@ -253,7 +253,7 @@ theme_set(theme_bw())
 
 ```{r}
 # import data
-var_qual <- read_delim("./vcftools/chloroplast_AHV.lqual", delim = "\t", col_names = c("chr", "pos", "qual"), skip = 1)
+var_qual <- read_delim("./vcftools/chloroplast_AHV.lqual", delim = "\t", col_names = c("chr", "pos", "qual"), skip = 1, show_col_types = FALSE)
 
 # plot
 a <- ggplot(var_qual, aes(qual)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
@@ -276,7 +276,7 @@ ggplot(var_depth, aes(mean_depth)) + geom_density(fill = "dodgerblue1", colour =
 summary(var_depth$mean_depth)
 ```
 
-NOTES: After looking at plot and summary, setting max depth to 110 and min to 5 to remove at least some the odd peak of lower coverage variants... I don't want to be too harsh here though because of having outgroups in this vcf...
+NOTES: After looking at plot and summary, setting min to 5 to remove at least some the odd peak of lower coverage variants... I am still caught by the double peak situation and actally sorta surprised to see it here without the outgroups. I changed my mind about max depth because of how gradual that slope is and how arbitrary it feels...
 
 ### Variant Missingness
 
@@ -323,7 +323,7 @@ ind_depth <- read_delim("./vcftools/chloroplast_AHV.idepth", delim = "\t", col_n
 ggplot(ind_depth, aes(depth)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
 ```
 
-NOTES: Weird and highly variable becasue chloroplast... Not sure if there is anything to be done about it
+NOTES: SHIT! Just noticed all those zeros - but they aren't actual zeros I think, just values less than like 3. Those will go away with missingness filters later but fuck. And more critically, why?? There is so much chloroplast DNA!
 
 ### Proportion of missing data per individual
 
@@ -336,7 +336,7 @@ ind_miss  <- read_delim("./vcftools/chloroplast_AHV.imiss", delim = "\t",
 ggplot(ind_miss, aes(fmiss)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
 ```
 
-NOTES: BAD - some samples are missing more than 75% data, several somehow missing everything... I need to remove these I think! maybe even remove samples missing more than like, 25%...
+NOTES: Those with high missing data values from before must all be alle/vill, this only changes at the lower missing coverage end. BUMMER.
 
 ### Heterozygosity and inbreeding coefficient per individual
 
@@ -349,7 +349,7 @@ ind_het <- read_delim("./vcftools/chloroplast_AHV.het", delim = "\t",
 ggplot(ind_het, aes(f)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
 ```
 
-NOTES: looks great - just what we roughly expect from HWE
+NOTES: Interestingly looks skewed to be more diverse than expected under HWE - I assume this somehow makes sense for chloroplasts?? Should look that up!
 
 ## VCF filtering
 
@@ -360,7 +360,7 @@ bcftools view --samples-file <(awk -v threshold=0.2 '$5 <= threshold {print $1}'
 
 # set variables 
 VCF_IN=unfiltered_chloroplast_AHV_.5missco.vcf.gz
-VCF_OUT=chloroplast_w.outgroups_filtered.vcf.gz
+VCF_OUT=chloroplast_AHV_filtered.vcf.gz
 
 # Set our chosen filters
 # MAF=0.1 # "Number of samples times this number gives number of minumum # individuals that must have an allele for it to be included; chloroplast vcf with outgroups has 138, so 0.015 means 2 samps must have the allele to include it. - might want to remove this because only 4 guan, so that might kill snp count... in fact, skipping for now. 
@@ -368,14 +368,15 @@ VCF_OUT=chloroplast_w.outgroups_filtered.vcf.gz
 # reccommend one dataset with filters and the other without for use in analyses with different biases
 MISS=0.1 # Meaning only tolerate 10% missingness (remove things in 10% or fewer of the samples)
 QUAL=30 
-MIN_DEPTH=5
-MAX_DEPTH=110
+MIN_DEPTH=2
+#MAX_DEPTH=110 
+#--max-meanDP $MAX_DEPTH --maxDP $MAX_DEPTH
 
 # perform the filtering with vcftools
 vcftools --gzvcf $VCF_IN \
 --remove-indels --max-missing $MISS --minQ $QUAL \
---min-meanDP $MIN_DEPTH --max-meanDP $MAX_DEPTH \
---minDP $MIN_DEPTH --maxDP $MAX_DEPTH --max-alleles 2 \
+--min-meanDP $MIN_DEPTH \
+--minDP $MIN_DEPTH  --max-alleles 2 \
 --recode --stdout | gzip -c > \
 $VCF_OUT
 ```

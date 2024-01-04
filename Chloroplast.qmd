@@ -110,10 +110,25 @@ PREFIX="chloro_pca"
 #OUT="chloro_w.outgroups"
 
 ## convert filtered vcf (see VCF_QC.qmd) to plink format
-plink2 --vcf chloroplast_w.outgroups_filtered.vcf.gz --recode transpose --out $PREFIX --allow-extra-chr
+plink2 --vcf chloroplast_AHV_filtered.vcf.gz --recode transpose --out $PREFIX --allow-extra-chr
 
 ## Run PCA with bim/bam input
 plink2 --tfile ${PREFIX} --pca --out ${PREFIX} --allow-extra-chr
-
-#NOTES: not working... added a missingness filter that removed 75 samples (--mind 0.1) - still not working; PICKUP retry on the file with just alle and vill and hybs, work on tree with larger dataset
+#NOTES: not working on larger vcf with outgroups... added a missingness filter that removed 75 samples (--mind 0.1) - still not working, now because not enough data. 
 ```
+```{r}
+# import eigenvalues
+eigenvec <- read_tsv("chloro_pca.eigenvec")
+str(eigenvec)
+eigenvec$ID <- eigenvec$IID
+eigenvec <- eigenvec %>%
+  separate(ID, into = c("ID", "species"), sep = "_", remove = T)
+                
+# plotting the pca
+ggplot(eigenvec) +
+  geom_point(aes(x = PC1, y = PC2, colour=species)) +
+  labs(title = "Chlorplast variants (51 snps)",
+       x = "PC1",
+       y = "PC2")
+```
+
