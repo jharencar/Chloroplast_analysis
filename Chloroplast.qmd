@@ -1,12 +1,24 @@
 ---
 title: "Chloroplast_analysis"
 author: "Julia Harenčár"
-format: html
-editor: visual
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    code-overflow: wrap
+    toc: true
+    number-sections: true
+theme:
+  light: minty
+  dark: superhero
+editor_options: 
+  chunk_output_type: console
 ---
 
 ## Chloroplast analysis
+
 ### Unrooted tree
+
 ```{r}
 # library(rdiversity)
 library(vcfR)
@@ -67,6 +79,7 @@ dist <- gen2dist(vcf, biallelic = TRUE)
 ```
 
 ### Rooted tree with other local Costus
+
 ```{r}
 # New VCF includes BRAC that had coverage greater or equal to 0.5x; includes all GUAN and LAEV and the few LASI - all additions from OG_plate1 sequencing
 
@@ -83,77 +96,24 @@ phylo <- aboot(gind, strata = NULL, tree = "nj", distance = "nei.dist", root = F
 plot.phylo(phylo)
 
 ```
+
 #### Notes on Chloroplast tree results
 
 It looks like all hybrids have a villosissimus chloroplast, which is shocking! Many hybs looked like alle, thought bc of maternal effects but must be dominance of alle floral traits especially (?) - double check stuff we called alle that turned out to be hyb - fall with vill in chloroplast tree? Where do backcrosses fall? -
 
 ### PCA
-```{r}
-# PCA below
-library(vegan)
-library(ggplot2)
-library(ggpubr)
+```{bash}
+### My modified version for of Brock's pca code for chloroplast analysis
+## SETUP
+mkdir -p PCA
+PREFIX="chloro_pca"
+#OUT="chloro_w.outgroups"
 
-# extract snp data
-snps_num <- vcfR::extract.gt(unfilt_vcf, 
-           element = "GT",
-           IDtoRowNames  = F,
-           as.numeric = T,
-           convertNA = T,
-           return.alleles = F)
+## convert filtered vcf (see VCF_QC.qmd) to plink format
+plink2 --vcf chloroplast_w.outgroups_filtered.vcf.gz --recode transpose --out $PREFIX --allow-extra-chr
 
-# transpose and create data frame
-snps_num_t <- t(snps_num) 
-snps_num_df <- data.frame(snps_num_t)
+## Run PCA with bim/bam input
+plink2 --tfile ${PREFIX} --pca --out ${PREFIX} --allow-extra-chr
 
-# write function to count NAs
-find_NAs <- function(x){
-  NAs_TF <- is.na(x)
-  i_NA <- which(NAs_TF == TRUE)
-  N_NA <- length(i_NA)
-  
-  cat("Results:",N_NA, "NAs present\n.")
-  return(i_NA)
-}
-# count NAs
-# number of rows (individuals)
-N_rows <- nrow(snps_num_t)
-# vector to hold output (number of NAs)
-N_NA   <- rep(x = 0, times = N_rows)
-# total number of columns (SNPs)
-N_SNPs <- ncol(snps_num_t)
-# the for() loop
-for(i in 1:N_rows){
-  # for each row, find the location of
-  ## NAs with snps_num_t()
-  i_NA <- find_NAs(snps_num_t[i,]) 
-  # then determine how many NAs
-  ## with length()
-  N_NA_i <- length(i_NA)
-## our storage vector
-  N_NA[i] <- N_NA_i
-}
-
-# histogram NAs
-# 50% of N_SNPs
-cutoff50 <- N_SNPs*0.5
-
-hist(N_NA)            
-abline(v = cutoff50, 
-       col = 2, 
-       lwd = 2, 
-       lty = 2)
-
-# trying copied below directly:
-percent_NA <- N_NA/N_SNPs*100
-# Call which() on percent_NA
-i_NA_50percent <- which(percent_NA > 50) 
-snps_num_t02 <- snps_num_t[-i_NA_50percent, ]
-
-# center data:
-SNPs_scaled <- scale(snps_num_t02)
-# calculate principal components (DOESN'T WORK)
-pca_scaled <- prcomp(snps_num_t02)
-
+#NOTES: not working... added a missingness filter that removed 75 samples (--mind 0.1) - still not working; PICKUP retry on the file with just alle and vill and hybs, work on tree with larger dataset
 ```
-
